@@ -62,10 +62,10 @@ class plotting_tests_wec():
         prob = Problem(root=AEPGroup(nTurbines=nTurbines, nDirections=nDirections, wake_model=gauss_wrapper,
                                      wake_model_options=wake_model_options, datasize=0, use_rotor_components=False,
                                      params_IdepVar_func=add_gauss_params_IndepVarComps, differentiable=True,
-                                     params_IndepVar_args={}))
+                                     params_IdepVar_args={}))
 
         # initialize problem
-        prob.setup(check=True)
+        prob.setup(check=False)
 
         # assign values to turbine states
         prob['turbineX'] = turbineX
@@ -89,9 +89,10 @@ class plotting_tests_wec():
         prob['model_params:wake_model_version'] = '2016'
         prob['model_params:ti_calculation_method'] = 4
         prob['model_params:I'] = 0.1
+        prob['model_params:WECH'] = 0
 
         # run the problem
-        prob.run()
+        prob.run_driver()
 
         self.prob = prob
         self.label = ''
@@ -120,8 +121,8 @@ class plotting_tests_wec():
             for j in np.arange(0, xx.shape[1]):
                 prob['turbineX'][2] = xx[int(i), int(j)]
                 prob['turbineY'][2] = yy[int(i), int(j)]
-                # print prob['turbineX'], prob['turbineY']
-                prob.run_once()
+                # print( prob['turbineX'], prob['turbineY'])
+                prob.run_model()
                 vel[int(i), int(j)] = self.prob['wtVelocity0'][2]
 
         self.vel = vel
@@ -149,8 +150,8 @@ class plotting_tests_wec():
             for j in np.arange(0, xx.shape[1]):
                 prob['turbineX'][2] = xx[int(i), int(j)]
                 prob['turbineY'][2] = yy[int(i), int(j)]
-                # print prob['turbineX'], prob['turbineY']
-                prob.run_once()
+                # print( prob['turbineX'], prob['turbineY'])
+                prob.run_model()
                 aep[int(i), int(j)] = self.prob['AEP']
 
         self.aep = aep
@@ -170,6 +171,11 @@ class plotting_tests_wec():
             xivals = np.arange(1.0, 10.0, .5)
             diam_on = 1
             angle_on = 0
+        elif exp_type == "hybrid":
+            xivals = np.arange(1.0, 10.0, .5)
+            diam_on = 1
+            angle_on = 0
+            self.prob['model_params:WECH'] = 1
         else:
             raise ValueError("incorrect value specified for exp_type in plot_cross_sections")
 
@@ -192,12 +198,16 @@ class plotting_tests_wec():
         elif exp_type =="diam":
             diam_on = 1
             angle_on = 0
+        elif exp_type == "hybrid":
+            diam_on = 1
+            angle_on = 0
+            self.prob['model_params:WECH'] = 1
         else:
-            raise ValueError("incorrect value specified for exp_type in plot_cross_sections")
+            raise ValueError("incorrect value specified for exp_type in plot_contour")
 
 
         # self.get_velocity(wec_diameter_multiplier=xival ** diam_on, wec_wec_spreading_angle=xival ** angle_on, x0=0., x1=10.)
-        self.get_aep(wec_diameter_multiplier=xival ** diam_on, wec_wec_spreading_angle=xival ** angle_on, x0=0., x1=10.)
+        self.get_aep(wec_diameter_multiplier=xival ** diam_on, wec_wec_spreading_angle=xival * angle_on, x0=0., x1=10.)
 
 
         # plt.contourf(self.xx/self.rotor_diameter, self.yy / self.rotor_diameter, self.vel, cmap='coolwarm')
@@ -287,7 +297,7 @@ class plotting_tests_wec():
 
         # a = (1./(2.*np.cos(yaw)))*(1.-np.sqrt(1.-Ct_local*np.cos(yaw)))
         Ct_local[:] = np.cos(yaw)*Ct_local
-        print Ct_local
+        print( Ct_local)
         # quit()
         def x0_func(yaw, ct, alpha, beta, ti, d):
 
@@ -296,15 +306,15 @@ class plotting_tests_wec():
             return x0od
 
         x0od = x0_func(yaw[0], Ct_local[0], alpha, beta, TIturbs[0], rotorDiameter[0])
-        print 'test x0/d is ', x0od
-        print 'exp x0/d is', data0x[-1]
+        print( 'test x0/d is ', x0od)
+        print( 'exp x0/d is', data0x[-1])
         # quit()
         modelx = np.linspace(tol*1E3, 20, 100)
         modely = np.linspace(0, 0, 1)
         point_vel = np.ones([modelx.size, modely.size])
         for i in np.arange(0, modelx.size):
             pointX = modelx[i] * rotorDiameter[0]
-            # print 'pointX (python) = ', pointX
+            # print( 'pointX (python) = ', pointX)
             _, wake_offset = point_velocity_with_shear_func(turbI, wake_combination_method,
                                                             wake_model_version,
                                                             sorted_x_idx, pointX, pointY, pointZ,
@@ -313,7 +323,7 @@ class plotting_tests_wec():
                                                             turbineXw, turbineYw, turbineZ,
                                                             rotorDiameter, yaw, wtVelocity,
                                                             Ct_local, TIturbs, ky_local, kz_local)
-            print 'offset 1', wake_offset
+            print( 'offset 1', wake_offset)
 
             for j in np.arange(0, modely.size):
 
@@ -328,7 +338,7 @@ class plotting_tests_wec():
                                                                 rotorDiameter, yaw, wtVelocity,
                                                                 Ct_local, TIturbs, ky_local, kz_local)
 
-                # print 'offset 2', point_vel[i], wake_offset
+                # print( 'offset 2', point_vel[i], wake_offset)
 
         modelval = (wind_speed-point_vel)/wind_speed
         # plot
@@ -417,9 +427,14 @@ if __name__ == "__main__":
 
     mytest = plotting_tests_wec()
     # mytest.plot_data_with_model()
-    # mytest.plot_cross_sections(exp_type='diam')
-    for xival in np.linspace(0, 20, 5):
-        mytest.plot_contour(exp_type='angle', xival=xival, save_fig=False)
+    # mytest.plot_cross_sections(exp_type='hybrid')
+    # mytest.plot_contour(exp_type='angle', xival=0.0, save_fig=False)
+    xis = np.array([0., 10., 20., 30., 40., 50., 60.])
+    xis = np.array([1., 2., 4., 6., 8., 10., 12.])
+    xis = np.array([1., 1.5, 2.0, 2.5, 3.0, 3.5, 4.0])
+    for xival in xis:
+        print( xival)
+        mytest.plot_contour(exp_type='hybrid', xival=xival, save_fig=False)
 
 
     # mytest = bpa_wind_tunnel_plots()
